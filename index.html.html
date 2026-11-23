@@ -1,0 +1,2588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Placement Management System | Uttaranchal University</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+
+    /* Print-Friendly Styles for Official Placement Reports */
+    @media print {
+      body { background: #ffffff !important; color: #0f172a !important; }
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      #report-printable-area {
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      table { width: 100% !important; border-collapse: collapse !important; font-size: 11px !important; }
+      th, td { border: 1px solid #cbd5e1 !important; padding: 6px 8px !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen antialiased selection:bg-blue-100 selection:text-blue-900">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-[calc(100%-2rem)] pointer-events-none no-print"></div>
+
+  <!-- Global Modal Container -->
+  <div id="modal-backdrop" class="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4 no-print">
+    <div id="modal-panel" class="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in border border-slate-200">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80">
+        <h3 id="modal-title" class="text-lg font-bold text-slate-900">Modal</h3>
+        <button onclick="closeModal()" class="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition" aria-label="Close modal">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="modal-body" class="p-6 overflow-y-auto flex-1"></div>
+    </div>
+  </div>
+
+  <!-- Custom Confirm Dialog Modal -->
+  <div id="confirm-backdrop" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4 no-print">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in border border-slate-200">
+      <div class="p-6">
+        <div class="flex items-start gap-4">
+          <div class="w-11 h-11 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          </div>
+          <div>
+            <h3 id="confirm-title" class="text-base font-bold text-slate-900">Confirm Action</h3>
+            <p id="confirm-message" class="text-sm text-slate-600 mt-1">Are you sure you want to continue?</p>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-6">
+          <button id="confirm-cancel-btn" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition">Cancel</button>
+          <button id="confirm-ok-btn" class="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Application Root -->
+  <div id="app" class="min-h-screen flex flex-col"></div>
+
+  <script>
+    /* =========================================================================
+       1. STORAGE KEYS & GENERAL UTILITIES
+       ========================================================================= */
+    const STORAGE_KEY = 'uu_spms_db_v2';
+    const SESSION_KEY = 'uu_spms_session_v2';
+
+    /** Returns today's local date in YYYY-MM-DD format */
+    function getTodayISO() {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    /** Returns a local date offset by N days in YYYY-MM-DD format */
+    function getOffsetDateISO(days) {
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    /** Escapes special HTML characters to prevent XSS */
+    function escapeHTML(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    /** Formats ISO datetime string for display */
+    function formatDateTime(dtStr) {
+      if (!dtStr) return '—';
+      const d = new Date(dtStr);
+      if (isNaN(d.getTime())) return dtStr;
+      return d.toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+    }
+
+    /* =========================================================================
+       2. PRE-SEEDED CAMPUS PLACEMENT DATASET (localStorage)
+       ========================================================================= */
+    function buildSeedDatabase() {
+      return {
+        meta: {
+          seededAt: new Date().toISOString(),
+          version: '2.0'
+        },
+        admins: [
+          {
+            admin_id: 1,
+            name: 'Training & Placement Officer (TPO)',
+            department: 'Training & Placement Cell, Uttaranchal University'
+          }
+        ],
+        students: [
+          {
+            student_id: '2413020122',
+            name: 'Mayureshwar Dilip Ghaterao',
+            phone: '9876543210',
+            course: 'BCA',
+            cgpa: 8.45,
+            backlogs: 0,
+            status: 'ACTIVE'
+          },
+          {
+            student_id: '2413020145',
+            name: 'Priya Sharma',
+            phone: '9823456711',
+            course: 'BCA',
+            cgpa: 7.20,
+            backlogs: 1,
+            status: 'ACTIVE'
+          },
+          {
+            student_id: '2413020168',
+            name: 'Rohit Verma',
+            phone: '9765432198',
+            course: 'BCA',
+            cgpa: 6.15,
+            backlogs: 2,
+            status: 'ACTIVE'
+          },
+          {
+            student_id: '2413020184',
+            name: 'Ananya Joshi',
+            phone: '9890123456',
+            course: 'BCA',
+            cgpa: 9.10,
+            backlogs: 0,
+            status: 'ACTIVE'
+          },
+          {
+            student_id: '2413020209',
+            name: 'Karan Mehta',
+            phone: '9811223344',
+            course: 'MCA',
+            cgpa: 7.85,
+            backlogs: 0,
+            status: 'ACTIVE'
+          },
+          {
+            student_id: '2413020231',
+            name: 'Sneha Rawat',
+            phone: '9755667788',
+            course: 'B.Tech CSE',
+            cgpa: 6.80,
+            backlogs: 1,
+            status: 'INACTIVE'
+          }
+        ],
+        companies: [
+          {
+            company_id: 201,
+            company_name: 'Tata Consultancy Services (TCS)',
+            location: 'Pune / Noida',
+            contact_person: 'Rajesh Kulkarni (Campus HR)',
+            contact_phone: '020-66087777',
+            status: 'ACTIVE'
+          },
+          {
+            company_id: 202,
+            company_name: 'Infosys Limited',
+            location: 'Bengaluru / Chandigarh',
+            contact_person: 'Meera Nair (Talent Acquisition)',
+            contact_phone: '080-28520261',
+            status: 'ACTIVE'
+          },
+          {
+            company_id: 203,
+            company_name: 'Deloitte India',
+            location: 'Hyderabad / Gurugram',
+            contact_person: 'Siddharth Rao (University Recruiter)',
+            contact_phone: '0124-6792000',
+            status: 'ACTIVE'
+          },
+          {
+            company_id: 204,
+            company_name: 'Wipro Technologies',
+            location: 'Noida / Pune',
+            contact_person: 'Kavita Deshmukh (HR Lead)',
+            contact_phone: '0120-3070000',
+            status: 'ACTIVE'
+          },
+          {
+            company_id: 205,
+            company_name: 'Tech Mahindra',
+            location: 'Dehradun / Noida',
+            contact_person: 'Vikram Negi (Campus Coordinator)',
+            contact_phone: '0135-2771200',
+            status: 'ACTIVE'
+          }
+        ],
+        jobs: [
+          {
+            job_id: 301,
+            company_id: 201,
+            title: 'Junior Software Developer (Java)',
+            description: 'Build and maintain enterprise web applications using Java, OOP principles, Servlets/JSP, and relational databases. Full onboarding training included.',
+            min_cgpa: 7.50,
+            max_backlogs: 0,
+            last_date: getOffsetDateISO(25),
+            status: 'OPEN'
+          },
+          {
+            job_id: 302,
+            company_id: 202,
+            title: 'Operations Executive / Systems Associate',
+            description: 'Assist with enterprise application monitoring, IT service delivery, database administration support, and cloud operations workflows.',
+            min_cgpa: 6.50,
+            max_backlogs: 1,
+            last_date: getOffsetDateISO(20),
+            status: 'OPEN'
+          },
+          {
+            job_id: 303,
+            company_id: 203,
+            title: 'Information Security & Risk Analyst Intern',
+            description: 'Support security operations teams with vulnerability reviews, access-control audits, incident triage, and compliance documentation.',
+            min_cgpa: 8.00,
+            max_backlogs: 0,
+            last_date: getOffsetDateISO(18),
+            status: 'OPEN'
+          },
+          {
+            job_id: 304,
+            company_id: 204,
+            title: 'Technical Support Associate',
+            description: 'Deliver L1/L2 technical assistance for enterprise platforms, log incident tickets, and coordinate timely resolution with engineering teams.',
+            min_cgpa: 6.00,
+            max_backlogs: 2,
+            last_date: getOffsetDateISO(30),
+            status: 'OPEN'
+          },
+          {
+            job_id: 305,
+            company_id: 205,
+            title: 'Web Frontend Developer Trainee',
+            description: 'Create responsive user interfaces using HTML5, CSS3, JavaScript, and modern component architectures for client portals.',
+            min_cgpa: 7.00,
+            max_backlogs: 1,
+            last_date: getOffsetDateISO(-3), // Past deadline to demonstrate eligibility reason
+            status: 'OPEN'
+          },
+          {
+            job_id: 306,
+            company_id: 202,
+            title: 'QA & Automation Testing Trainee',
+            description: 'Write test plans, perform functional and regression testing, and automate UI verification scripts.',
+            min_cgpa: 7.00,
+            max_backlogs: 0,
+            last_date: getOffsetDateISO(-10),
+            status: 'CLOSED'
+          }
+        ],
+        applications: [
+          {
+            application_id: 401,
+            student_id: '2413020122',
+            job_id: 301,
+            applied_on: getOffsetDateISO(-8),
+            status: 'INTERVIEW_SCHEDULED'
+          },
+          {
+            application_id: 402,
+            student_id: '2413020184',
+            job_id: 303,
+            applied_on: getOffsetDateISO(-12),
+            status: 'SELECTED'
+          },
+          {
+            application_id: 403,
+            student_id: '2413020209',
+            job_id: 301,
+            applied_on: getOffsetDateISO(-10),
+            status: 'SELECTED'
+          },
+          {
+            application_id: 404,
+            student_id: '2413020145',
+            job_id: 302,
+            applied_on: getOffsetDateISO(-5),
+            status: 'SHORTLISTED'
+          },
+          {
+            application_id: 405,
+            student_id: '2413020168',
+            job_id: 304,
+            applied_on: getOffsetDateISO(-4),
+            status: 'APPLIED'
+          },
+          {
+            application_id: 406,
+            student_id: '2413020184',
+            job_id: 301,
+            applied_on: getOffsetDateISO(-9),
+            status: 'REJECTED'
+          }
+        ],
+        interviews: [
+          {
+            interview_id: 501,
+            application_id: 401,
+            interview_date: getOffsetDateISO(-2) + 'T11:00',
+            round_name: 'Aptitude & Coding Assessment',
+            remarks: 'Cleared with 88% score; strong Java & DBMS problem solving.'
+          },
+          {
+            interview_id: 502,
+            application_id: 401,
+            interview_date: getOffsetDateISO(3) + 'T14:30',
+            round_name: 'Technical Round 1 (Java & SQL)',
+            remarks: 'Scheduled in Placement Cell Lab 2.'
+          },
+          {
+            interview_id: 503,
+            application_id: 402,
+            interview_date: getOffsetDateISO(-7) + 'T10:30',
+            round_name: 'Technical Security Panel',
+            remarks: 'Strong knowledge of networking and application security fundamentals.'
+          },
+          {
+            interview_id: 504,
+            application_id: 402,
+            interview_date: getOffsetDateISO(-5) + 'T15:00',
+            round_name: 'HR & Managerial Round',
+            remarks: 'Recommended for final offer letter.'
+          },
+          {
+            interview_id: 505,
+            application_id: 403,
+            interview_date: getOffsetDateISO(-6) + 'T11:30',
+            round_name: 'Technical + HR Combined Round',
+            remarks: 'Impressive capstone project walkthrough.'
+          },
+          {
+            interview_id: 506,
+            application_id: 406,
+            interview_date: getOffsetDateISO(-4) + 'T16:00',
+            round_name: 'Technical Round 1',
+            remarks: 'Candidate accepted primary offer with Deloitte.'
+          }
+        ],
+        results: [
+          {
+            result_id: 601,
+            application_id: 402,
+            result_status: 'SELECTED',
+            package_lpa: 6.5
+          },
+          {
+            result_id: 602,
+            application_id: 403,
+            result_status: 'SELECTED',
+            package_lpa: 4.8
+          },
+          {
+            result_id: 603,
+            application_id: 406,
+            result_status: 'REJECTED',
+            package_lpa: 0
+          }
+        ]
+      };
+    }
+
+    let DB = null;
+
+    function initDB() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          DB = JSON.parse(raw);
+          if (DB && Array.isArray(DB.students) && Array.isArray(DB.companies) && Array.isArray(DB.jobs)) {
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Re-seeding localStorage due to parse error:', err);
+      }
+      DB = buildSeedDatabase();
+      saveDB();
+    }
+
+    function saveDB() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
+      } catch (err) {
+        showToast('Unable to persist data in browser storage.', 'error');
+      }
+    }
+
+    function nextNumericId(collection, idField, fallbackStart = 1) {
+      if (!collection.length) return fallbackStart;
+      return Math.max(...collection.map(item => Number(item[idField]) || 0)) + 1;
+    }
+
+    /* =========================================================================
+       3. SESSION & UI STATE
+       ========================================================================= */
+    const state = {
+      session: null, // { role: 'ADMIN' | 'STUDENT', id: string|number, name: string }
+      activeTab: 'dashboard',
+      mobileMenuOpen: false,
+      // Portal Entry student selector
+      entryStudentSearch: '',
+      selectedEntryStudentId: '2413020122',
+      // Admin filters
+      studentSearch: '',
+      studentStatusFilter: 'ALL',
+      companySearch: '',
+      jobSearch: '',
+      jobStatusFilter: 'ALL',
+      appJobFilter: 'ALL',
+      appStatusFilter: 'ALL',
+      appSearch: '',
+      // Student filters
+      studentJobFilter: 'OPEN',
+      studentJobSearch: '',
+      // Reports
+      activeReport: 'students',
+      eligibleReportJobId: null
+    };
+
+    function loadSession() {
+      try {
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          // Validate student still exists if student session
+          if (parsed && parsed.role === 'STUDENT') {
+            const exists = getStudentById(parsed.id);
+            if (!exists || exists.status !== 'ACTIVE') {
+              saveSession(null);
+              return;
+            }
+            parsed.name = exists.name;
+          }
+          state.session = parsed;
+        }
+      } catch (e) {
+        state.session = null;
+      }
+    }
+
+    function saveSession(sessionObj) {
+      state.session = sessionObj;
+      try {
+        if (sessionObj) {
+          sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionObj));
+        } else {
+          sessionStorage.removeItem(SESSION_KEY);
+        }
+      } catch (e) {
+        // Ignore restricted sessionStorage
+      }
+    }
+
+    /* =========================================================================
+       4. DOMAIN LOOKUPS & REAL-TIME ELIGIBILITY ENGINE
+       ========================================================================= */
+    function getCompanyById(id) {
+      return DB.companies.find(c => Number(c.company_id) === Number(id)) || null;
+    }
+
+    function getStudentById(id) {
+      return DB.students.find(s => String(s.student_id) === String(id)) || null;
+    }
+
+    function getJobById(id) {
+      return DB.jobs.find(j => Number(j.job_id) === Number(id)) || null;
+    }
+
+    function getApplicationById(id) {
+      return DB.applications.find(a => Number(a.application_id) === Number(id)) || null;
+    }
+
+    function getInterviewsForApp(appId) {
+      return DB.interviews
+        .filter(iv => Number(iv.application_id) === Number(appId))
+        .sort((a, b) => (a.interview_date || '').localeCompare(b.interview_date || ''));
+    }
+
+    function getResultForApp(appId) {
+      return DB.results.find(r => Number(r.application_id) === Number(appId)) || null;
+    }
+
+    /**
+     * Evaluates eligibility of a student against a job's criteria.
+     * Rules:
+     * 1. Student must be ACTIVE
+     * 2. Job must be OPEN
+     * 3. Job deadline (last_date) >= Today
+     * 4. Student CGPA >= Job min_cgpa
+     * 5. Student backlogs <= Job max_backlogs
+     */
+    function checkEligibility(student, job) {
+      const reasons = [];
+      const today = getTodayISO();
+
+      if (student.status !== 'ACTIVE') {
+        reasons.push('Student profile inactive');
+      }
+      if (job.status !== 'OPEN') {
+        reasons.push('Job opening closed');
+      }
+      if (job.last_date && job.last_date < today) {
+        reasons.push(`Deadline passed (${job.last_date})`);
+      }
+      if (Number(student.cgpa) < Number(job.min_cgpa)) {
+        reasons.push(`Requires Min CGPA ${Number(job.min_cgpa).toFixed(2)}`);
+      }
+      if (Number(student.backlogs) > Number(job.max_backlogs)) {
+        reasons.push(`Max ${job.max_backlogs} Backlog${job.max_backlogs === 1 ? '' : 's'} allowed`);
+      }
+
+      return {
+        eligible: reasons.length === 0,
+        reasons
+      };
+    }
+
+    function statusBadge(status) {
+      const map = {
+        ACTIVE: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+        INACTIVE: 'bg-slate-100 text-slate-600 ring-slate-500/20',
+        OPEN: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+        CLOSED: 'bg-rose-50 text-rose-700 ring-rose-600/20',
+        APPLIED: 'bg-sky-50 text-sky-700 ring-sky-600/20',
+        SHORTLISTED: 'bg-blue-50 text-blue-700 ring-blue-600/20',
+        INTERVIEW_SCHEDULED: 'bg-amber-50 text-amber-700 ring-amber-600/20',
+        SELECTED: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+        REJECTED: 'bg-rose-50 text-rose-700 ring-rose-600/20',
+        ON_HOLD: 'bg-slate-100 text-slate-700 ring-slate-500/20'
+      };
+      const cls = map[status] || 'bg-slate-100 text-slate-700 ring-slate-500/20';
+      const label = (status || '').replace(/_/g, ' ');
+      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1 ring-inset ${cls}">${escapeHTML(label)}</span>`;
+    }
+
+    /* =========================================================================
+       5. TOAST, MODAL & CONFIRM DIALOG HELPERS
+       ========================================================================= */
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const colors = {
+        success: 'bg-emerald-600 text-white',
+        error: 'bg-rose-600 text-white',
+        info: 'bg-blue-600 text-white',
+        warning: 'bg-amber-500 text-white'
+      };
+      const el = document.createElement('div');
+      el.className = `pointer-events-auto flex items-center justify-between gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-fade-in ${colors[type] || colors.info}`;
+      el.innerHTML = `
+        <span>${escapeHTML(message)}</span>
+        <button onclick="this.parentElement.remove()" class="opacity-80 hover:opacity-100 text-white font-bold leading-none">&times;</button>
+      `;
+      container.appendChild(el);
+      setTimeout(() => {
+        if (el.parentElement) el.remove();
+      }, 3600);
+    }
+
+    function openModal(title, bodyHTML) {
+      document.getElementById('modal-title').textContent = title;
+      document.getElementById('modal-body').innerHTML = bodyHTML;
+      const backdrop = document.getElementById('modal-backdrop');
+      backdrop.classList.remove('hidden');
+      backdrop.classList.add('flex');
+    }
+
+    function closeModal() {
+      const backdrop = document.getElementById('modal-backdrop');
+      backdrop.classList.add('hidden');
+      backdrop.classList.remove('flex');
+      document.getElementById('modal-body').innerHTML = '';
+    }
+
+    function showConfirm(title, message, onConfirm, confirmLabel = 'Confirm', danger = false) {
+      const backdrop = document.getElementById('confirm-backdrop');
+      document.getElementById('confirm-title').textContent = title;
+      document.getElementById('confirm-message').textContent = message;
+      const okBtn = document.getElementById('confirm-ok-btn');
+      const cancelBtn = document.getElementById('confirm-cancel-btn');
+      okBtn.textContent = confirmLabel;
+      okBtn.className = danger
+        ? 'px-4 py-2 rounded-xl text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 transition'
+        : 'px-4 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition';
+
+      const cleanup = () => {
+        backdrop.classList.add('hidden');
+        backdrop.classList.remove('flex');
+      };
+      cancelBtn.onclick = cleanup;
+      okBtn.onclick = () => {
+        cleanup();
+        onConfirm();
+      };
+      backdrop.classList.remove('hidden');
+      backdrop.classList.add('flex');
+    }
+
+    document.getElementById('modal-backdrop').addEventListener('click', (e) => {
+      if (e.target.id === 'modal-backdrop') closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    });
+
+    /* =========================================================================
+       6. MODULE 1: ROLE-BASED PORTAL ENTRY & SESSION MANAGEMENT
+       ========================================================================= */
+    function renderPortalEntryView() {
+      const activeStudents = DB.students.filter(s => s.status === 'ACTIVE');
+      const q = state.entryStudentSearch.toLowerCase();
+      const filteredStudents = activeStudents.filter(s =>
+        !q || s.name.toLowerCase().includes(q) || String(s.student_id).toLowerCase().includes(q) || s.course.toLowerCase().includes(q)
+      );
+
+      // Ensure selected student ID defaults cleanly to an active student
+      if (!activeStudents.some(s => String(s.student_id) === String(state.selectedEntryStudentId)) && activeStudents.length) {
+        state.selectedEntryStudentId = activeStudents[0].student_id;
+      }
+
+      const kpi = computePlacementKPIs();
+
+      return `
+        <div class="min-h-screen flex flex-col bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
+          <!-- Top Academic Banner -->
+          <header class="px-4 sm:px-8 py-4 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-200 font-extrabold text-lg">
+                UU
+              </div>
+              <div>
+                <h1 class="text-white font-bold text-sm sm:text-base leading-tight">Uttaranchal University, Dehradun</h1>
+                <p class="text-blue-200/80 text-xs">Training & Placement Cell • BCA Capstone Project</p>
+              </div>
+            </div>
+            <button onclick="handleResetDemoData()" class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-blue-100 border border-white/15 transition">
+              ↻ Reset Demo Data
+            </button>
+          </header>
+
+          <!-- Main Portal Entry Content -->
+          <main class="flex-1 flex items-center justify-center p-4 sm:p-6">
+            <div class="w-full max-w-5xl space-y-6 animate-fade-in">
+
+              <!-- Hero Title Card -->
+              <div class="text-center max-w-2xl mx-auto">
+                <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-200 border border-blue-400/30 mb-3">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Instant Role-Based Access • Zero Setup
+                </span>
+                <h2 class="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+                  Student Placement Management System
+                </h2>
+                <p class="text-slate-300 text-sm sm:text-base mt-2">
+                  Select a role below to explore campus recruitment management, live CGPA & backlog eligibility checks, interview scheduling, and placement reports.
+                </p>
+              </div>
+
+              <!-- Two-Column Role Selection Grid -->
+              <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+
+                <!-- Administrator Portal Entry Card -->
+                <div class="lg:col-span-5 bg-white rounded-3xl shadow-2xl p-6 sm:p-7 flex flex-col justify-between border border-slate-200">
+                  <div>
+                    <div class="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center text-2xl mb-4">
+                      🏛️
+                    </div>
+                    <span class="text-xs font-bold uppercase tracking-wider text-blue-600">Placement Office</span>
+                    <h3 class="text-xl font-extrabold text-slate-900 mt-1">Administrator Portal</h3>
+                    <p class="text-sm text-slate-600 mt-2 leading-relaxed">
+                      Full control over student records, recruiting companies, job drives, application statuses, interview rounds, final offers, and all 7 official placement reports.
+                    </p>
+
+                    <div class="mt-5 grid grid-cols-2 gap-2.5 text-xs">
+                      <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                        <div class="text-slate-500">Active Students</div>
+                        <div class="text-lg font-extrabold text-slate-900 mt-0.5">${kpi.activeStudents}</div>
+                      </div>
+                      <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                        <div class="text-slate-500">Open Job Drives</div>
+                        <div class="text-lg font-extrabold text-blue-700 mt-0.5">${kpi.openJobs}</div>
+                      </div>
+                      <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                        <div class="text-slate-500">Companies</div>
+                        <div class="text-lg font-extrabold text-slate-900 mt-0.5">${kpi.activeCompanies}</div>
+                      </div>
+                      <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                        <div class="text-slate-500">Placed Students</div>
+                        <div class="text-lg font-extrabold text-emerald-700 mt-0.5">${kpi.placedCount}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="mt-6 pt-5 border-t border-slate-100 space-y-3">
+                    <button onclick="enterAdminPortal()"
+                      class="w-full py-3.5 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2">
+                      <span>Enter as Administrator</span>
+                      <span>→</span>
+                    </button>
+                    <p class="text-[11px] text-center text-slate-400">Profile: Training & Placement Officer (TPO)</p>
+                  </div>
+                </div>
+
+                <!-- Student Portal Entry Card -->
+                <div class="lg:col-span-7 bg-white rounded-3xl shadow-2xl p-6 sm:p-7 flex flex-col justify-between border border-slate-200">
+                  <div>
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <div class="flex items-center gap-3">
+                        <div class="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl">
+                          🎓
+                        </div>
+                        <div>
+                          <span class="text-xs font-bold uppercase tracking-wider text-emerald-600">Campus Candidate</span>
+                          <h3 class="text-xl font-extrabold text-slate-900 leading-tight">Student Portal</h3>
+                        </div>
+                      </div>
+                      <span class="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                        ${activeStudents.length} Active Students
+                      </span>
+                    </div>
+
+                    <p class="text-sm text-slate-600 mb-4">
+                      Choose any active student profile below to check live job eligibility, apply to open drives, update academic stats, and track interview rounds.
+                    </p>
+
+                    <!-- Search & Dropdown Selector -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-3">
+                      <input type="text" value="${escapeHTML(state.entryStudentSearch)}"
+                        oninput="state.entryStudentSearch = this.value; render();"
+                        placeholder="Search by Name, Learner ID, or Course..."
+                        class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none" />
+                      <select onchange="state.selectedEntryStudentId = this.value; render();"
+                        class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:border-blue-500 outline-none">
+                        ${activeStudents.map(s => `
+                          <option value="${escapeHTML(s.student_id)}" ${String(state.selectedEntryStudentId) === String(s.student_id) ? 'selected' : ''}>
+                            ${escapeHTML(s.name)} (${escapeHTML(s.student_id)})
+                          </option>
+                        `).join('')}
+                      </select>
+                    </div>
+
+                    <!-- Clickable Student Cards -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
+                      ${filteredStudents.length ? filteredStudents.map(s => {
+                        const selected = String(state.selectedEntryStudentId) === String(s.student_id);
+                        return `
+                          <button type="button" onclick="selectEntryStudent('${escapeHTML(s.student_id)}')"
+                            class="text-left p-3 rounded-xl border transition ${
+                              selected
+                                ? 'border-blue-600 bg-blue-50/80 ring-2 ring-blue-600/20'
+                                : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                            }">
+                            <div class="flex items-start justify-between gap-2">
+                              <div class="font-bold text-sm text-slate-900 leading-snug">${escapeHTML(s.name)}</div>
+                              ${selected ? `<span class="text-blue-600 text-xs font-bold shrink-0">✓</span>` : ''}
+                            </div>
+                            <div class="text-[11px] font-mono text-slate-500 mt-0.5">ID: ${escapeHTML(s.student_id)} • ${escapeHTML(s.course)}</div>
+                            <div class="mt-2 flex items-center gap-2 text-[11px] font-semibold">
+                              <span class="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700">CGPA: ${Number(s.cgpa).toFixed(2)}</span>
+                              <span class="px-2 py-0.5 rounded-md ${s.backlogs === 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">Backlogs: ${s.backlogs}</span>
+                            </div>
+                          </button>
+                        `;
+                      }).join('') : `<div class="col-span-full py-6 text-center text-sm text-slate-400">No active student matched "${escapeHTML(state.entryStudentSearch)}".</div>`}
+                    </div>
+                  </div>
+
+                  <div class="mt-5 pt-4 border-t border-slate-100">
+                    <button onclick="enterStudentPortal(state.selectedEntryStudentId)"
+                      ${!activeStudents.length ? 'disabled' : ''}
+                      class="w-full py-3.5 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold text-sm shadow-lg shadow-emerald-600/25 transition flex items-center justify-center gap-2">
+                      <span>Enter Student Portal</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Capstone Project Footer Metadata -->
+              <div class="text-center text-xs text-blue-200/80 pt-2">
+                <span class="font-semibold text-white">Submitted by:</span> Mayureshwar Dilip Ghaterao (Learner ID: 2413020122)
+                <span class="mx-2 text-blue-400">•</span>
+                <span class="font-semibold text-white">Guide:</span> Akshay Mali, Information Security Engineering Analyst
+              </div>
+            </div>
+          </main>
+        </div>
+      `;
+    }
+
+    function selectEntryStudent(studentId) {
+      state.selectedEntryStudentId = studentId;
+      render();
+    }
+
+    function enterAdminPortal() {
+      const admin = DB.admins[0] || { admin_id: 1, name: 'Training & Placement Officer (TPO)' };
+      saveSession({ role: 'ADMIN', id: admin.admin_id, name: admin.name });
+      state.activeTab = 'dashboard';
+      showToast('Entered Administrator Portal.', 'success');
+      render();
+    }
+
+    function enterStudentPortal(studentId) {
+      const student = getStudentById(studentId);
+      if (!student) {
+        showToast('Please select a valid active student.', 'error');
+        return;
+      }
+      if (student.status !== 'ACTIVE') {
+        showToast('Selected student account is inactive.', 'error');
+        return;
+      }
+      saveSession({ role: 'STUDENT', id: student.student_id, name: student.name });
+      state.activeTab = 'jobs';
+      showToast(`Welcome to the Student Portal, ${student.name}!`, 'success');
+      render();
+    }
+
+    function handleSwitchRole() {
+      saveSession(null);
+      state.mobileMenuOpen = false;
+      showToast('Returned to Portal Role Selection.', 'info');
+      render();
+    }
+
+    function handleResetDemoData() {
+      showConfirm(
+        'Reset Demo Data?',
+        'This will restore all students, companies, job openings, applications, interview rounds, and placement results to the default pre-seeded dataset.',
+        () => {
+          DB = buildSeedDatabase();
+          saveDB();
+          if (state.session && state.session.role === 'STUDENT' && !getStudentById(state.session.id)) {
+            saveSession(null);
+          }
+          showToast('Demo data has been restored.', 'success');
+          render();
+        },
+        'Reset Data',
+        true
+      );
+    }
+
+    /* =========================================================================
+       7. SHARED PORTAL SHELL (TOP BAR + SIDEBAR NAVIGATION)
+       ========================================================================= */
+    function renderPortalShell(navItems, contentHTML) {
+      const isAdmin = state.session.role === 'ADMIN';
+      const navButtons = navItems.map(item => {
+        const active = state.activeTab === item.id;
+        return `
+          <button onclick="switchTab('${item.id}')"
+            class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition ${
+              active
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }">
+            <span class="text-base leading-none">${item.icon}</span>
+            <span>${item.label}</span>
+          </button>
+        `;
+      }).join('');
+
+      return `
+        <div class="min-h-screen flex flex-col">
+          <!-- Top Academic Navigation Bar -->
+          <header class="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white shadow-md sticky top-0 z-30 no-print">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <button onclick="toggleMobileMenu()" class="lg:hidden p-2 rounded-lg text-blue-200 hover:bg-white/10" aria-label="Toggle Menu">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
+                <div class="w-9 h-9 rounded-xl bg-blue-500/25 border border-blue-400/30 flex items-center justify-center font-extrabold text-sm text-blue-100 shrink-0">UU</div>
+                <div class="truncate">
+                  <div class="font-bold text-sm sm:text-base leading-tight truncate">Student Placement Management System</div>
+                  <div class="text-[11px] text-blue-200/80 hidden sm:block">Uttaranchal University • ${isAdmin ? 'Administrator Portal' : 'Student Portal'}</div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+                <button onclick="handleResetDemoData()" title="Restore default demo data"
+                  class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/10 hover:bg-white/20 text-blue-100 border border-white/15 transition">
+                  ↻ Reset Demo
+                </button>
+                <div class="hidden md:flex flex-col text-right leading-tight">
+                  <span class="text-xs font-semibold text-white">${escapeHTML(state.session.name)}</span>
+                  <span class="text-[11px] text-blue-300">${isAdmin ? 'Administrator' : 'ID: ' + escapeHTML(state.session.id)}</span>
+                </div>
+                <button onclick="handleSwitchRole()"
+                  class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500 hover:bg-amber-600 text-slate-950 transition">
+                  Switch Role / Exit
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <!-- Mobile Drawer -->
+          ${state.mobileMenuOpen ? `
+            <div class="lg:hidden bg-white border-b border-slate-200 px-4 py-3 space-y-1 shadow-md no-print">
+              ${navButtons}
+              <button onclick="handleResetDemoData()" class="w-full text-left px-3.5 py-2 rounded-xl text-xs font-medium text-slate-500 hover:bg-slate-100">
+                ↻ Reset Demo Data
+              </button>
+            </div>
+          ` : ''}
+
+          <!-- Workspace Layout -->
+          <div class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex gap-6">
+            <aside class="hidden lg:flex flex-col w-60 shrink-0 no-print">
+              <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3 space-y-1 sticky top-20">
+                <div class="px-3 py-2 mb-1">
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Modules</div>
+                </div>
+                ${navButtons}
+                <div class="pt-4 mt-4 border-t border-slate-100 px-3 text-[11px] text-slate-400 leading-relaxed">
+                  <div class="font-semibold text-slate-600">BCA Capstone Project</div>
+                  <div>Mayureshwar Ghaterao</div>
+                  <div>Learner ID: 2413020122</div>
+                  <div>Guide: Akshay Mali</div>
+                </div>
+              </div>
+            </aside>
+
+            <main class="flex-1 min-w-0 animate-fade-in">
+              ${contentHTML}
+            </main>
+          </div>
+        </div>
+      `;
+    }
+
+    function switchTab(tabId) {
+      state.activeTab = tabId;
+      state.mobileMenuOpen = false;
+      render();
+    }
+
+    function toggleMobileMenu() {
+      state.mobileMenuOpen = !state.mobileMenuOpen;
+      render();
+    }
+
+    /* =========================================================================
+       8. MODULE 2 (PART A): ADMIN DASHBOARD & LIVE KPIs
+       ========================================================================= */
+    function computePlacementKPIs() {
+      const totalStudents = DB.students.length;
+      const activeStudents = DB.students.filter(s => s.status === 'ACTIVE').length;
+      const activeCompanies = DB.companies.filter(c => c.status === 'ACTIVE').length;
+      const openJobs = DB.jobs.filter(j => j.status === 'OPEN').length;
+      const totalApps = DB.applications.length;
+
+      const selectedResults = DB.results.filter(r => r.result_status === 'SELECTED');
+      const placedStudentIds = new Set(
+        selectedResults
+          .map(r => getApplicationById(r.application_id))
+          .filter(Boolean)
+          .map(a => String(a.student_id))
+      );
+      const placedCount = placedStudentIds.size;
+      const packages = selectedResults.map(r => Number(r.package_lpa) || 0).filter(p => p > 0);
+      const highestLpa = packages.length ? Math.max(...packages) : 0;
+      const avgLpa = packages.length ? (packages.reduce((a, b) => a + b, 0) / packages.length) : 0;
+
+      return { totalStudents, activeStudents, activeCompanies, openJobs, totalApps, placedCount, highestLpa, avgLpa };
+    }
+
+    function renderAdminDashboard() {
+      const kpi = computePlacementKPIs();
+      const recentApps = [...DB.applications].slice(-6).reverse();
+
+      const cards = [
+        { label: 'Total Active Students', value: kpi.activeStudents, sub: `${kpi.totalStudents} total registered`, border: 'border-l-blue-600' },
+        { label: 'Recruiting Companies', value: kpi.activeCompanies, sub: `${DB.companies.length} total companies`, border: 'border-l-sky-600' },
+        { label: 'Open Jobs', value: kpi.openJobs, sub: `${DB.jobs.length} total published`, border: 'border-l-emerald-600' },
+        { label: 'Total Applications', value: kpi.totalApps, sub: `${DB.interviews.length} interview rounds`, border: 'border-l-amber-500' },
+        { label: 'Placed Students', value: kpi.placedCount, sub: `${kpi.activeStudents ? Math.round((kpi.placedCount / kpi.activeStudents) * 100) : 0}% of active students`, border: 'border-l-indigo-600' },
+        { label: 'Highest / Avg Package', value: `${kpi.highestLpa.toFixed(1)} LPA`, sub: `Average: ${kpi.avgLpa.toFixed(2)} LPA`, border: 'border-l-rose-600' }
+      ];
+
+      return `
+        <div class="space-y-6">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-2xl font-extrabold text-slate-900">Administrator Dashboard</h2>
+              <p class="text-sm text-slate-500">Real-time campus placement KPIs and recent recruitment activity.</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button onclick="openJobModal()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-xs transition">+ Publish Job</button>
+              <button onclick="switchTab('reports')" class="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-sm font-semibold transition">Open 7 Reports</button>
+            </div>
+          </div>
+
+          <!-- KPI Cards Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            ${cards.map(c => `
+              <div class="bg-white rounded-2xl p-5 border border-slate-200/80 border-l-4 ${c.border} shadow-xs">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">${c.label}</div>
+                <div class="text-2xl font-extrabold text-slate-900 mt-1.5">${c.value}</div>
+                <div class="text-xs text-slate-500 mt-1">${c.sub}</div>
+              </div>
+            `).join('')}
+          </div>
+
+          <!-- Recent Applications Summary -->
+          <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 class="font-bold text-slate-900">Recent Student Applications</h3>
+              <button onclick="switchTab('applications')" class="text-xs font-semibold text-blue-600 hover:text-blue-800">Manage All →</button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm">
+                <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+                  <tr>
+                    <th class="px-5 py-3 font-semibold">Student</th>
+                    <th class="px-5 py-3 font-semibold">Job & Company</th>
+                    <th class="px-5 py-3 font-semibold">Applied On</th>
+                    <th class="px-5 py-3 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${recentApps.length ? recentApps.map(app => {
+                    const stu = getStudentById(app.student_id);
+                    const job = getJobById(app.job_id);
+                    const comp = job ? getCompanyById(job.company_id) : null;
+                    return `
+                      <tr class="hover:bg-slate-50/70">
+                        <td class="px-5 py-3.5">
+                          <div class="font-semibold text-slate-900">${escapeHTML(stu?.name || 'Unknown')}</div>
+                          <div class="text-xs text-slate-500">ID: ${escapeHTML(stu?.student_id || '-')} • ${escapeHTML(stu?.course || '-')} • CGPA ${stu ? Number(stu.cgpa).toFixed(2) : '-'}</div>
+                        </td>
+                        <td class="px-5 py-3.5">
+                          <div class="font-medium text-slate-800">${escapeHTML(job?.title || 'Unknown')}</div>
+                          <div class="text-xs text-slate-500">${escapeHTML(comp?.company_name || '-')}</div>
+                        </td>
+                        <td class="px-5 py-3.5 text-slate-600 text-xs">${escapeHTML(app.applied_on)}</td>
+                        <td class="px-5 py-3.5">${statusBadge(app.status)}</td>
+                      </tr>
+                    `;
+                  }).join('') : `<tr><td colspan="4" class="px-5 py-8 text-center text-slate-400">No applications recorded yet.</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    /* =========================================================================
+       9. MODULE 2 (PART B): STUDENT MANAGEMENT (CRUD — NO EMAIL / NO PASSWORD)
+       ========================================================================= */
+    function renderAdminStudents() {
+      const q = state.studentSearch.toLowerCase();
+      const filtered = DB.students.filter(s => {
+        const matchesStatus = state.studentStatusFilter === 'ALL' || s.status === state.studentStatusFilter;
+        const matchesQuery = !q
+          || s.name.toLowerCase().includes(q)
+          || String(s.student_id).toLowerCase().includes(q)
+          || (s.phone || '').toLowerCase().includes(q)
+          || s.course.toLowerCase().includes(q);
+        return matchesStatus && matchesQuery;
+      });
+
+      return `
+        <div class="space-y-5">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-2xl font-extrabold text-slate-900">Student Management</h2>
+              <p class="text-sm text-slate-500">Add, edit, search, and activate/deactivate student academic records.</p>
+            </div>
+            <button onclick="openStudentModal()" class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-xs transition">
+              + Add Student
+            </button>
+          </div>
+
+          <!-- Search & Filter Controls -->
+          <div class="bg-white rounded-2xl border border-slate-200/80 p-4 flex flex-col sm:flex-row gap-3">
+            <input type="text" value="${escapeHTML(state.studentSearch)}"
+              oninput="state.studentSearch = this.value; render();"
+              placeholder="Search by Student ID, full name, phone, or course..."
+              class="flex-1 px-4 py-2 rounded-xl border border-slate-200 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none" />
+            <select onchange="state.studentStatusFilter = this.value; render();"
+              class="px-4 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:border-blue-500 outline-none">
+              <option value="ALL" ${state.studentStatusFilter === 'ALL' ? 'selected' : ''}>All Statuses</option>
+              <option value="ACTIVE" ${state.studentStatusFilter === 'ACTIVE' ? 'selected' : ''}>Active Only</option>
+              <option value="INACTIVE" ${state.studentStatusFilter === 'INACTIVE' ? 'selected' : ''}>Inactive Only</option>
+            </select>
+          </div>
+
+          <!-- Students Table -->
+          <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm">
+                <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+                  <tr>
+                    <th class="px-4 py-3 font-semibold">Student ID</th>
+                    <th class="px-4 py-3 font-semibold">Full Name & Phone</th>
+                    <th class="px-4 py-3 font-semibold">Course</th>
+                    <th class="px-4 py-3 font-semibold">CGPA</th>
+                    <th class="px-4 py-3 font-semibold">Backlogs</th>
+                    <th class="px-4 py-3 font-semibold">Status</th>
+                    <th class="px-4 py-3 font-semibold text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${filtered.length ? filtered.map(s => `
+                    <tr class="hover:bg-slate-50/70">
+                      <td class="px-4 py-3.5 font-mono text-xs font-semibold text-slate-600">${escapeHTML(s.student_id)}</td>
+                      <td class="px-4 py-3.5">
+                        <div class="font-semibold text-slate-900">${escapeHTML(s.name)}</div>
+                        <div class="text-xs text-slate-500">Phone: ${escapeHTML(s.phone || 'N/A')}</div>
+                      </td>
+                      <td class="px-4 py-3.5 text-slate-700 font-medium">${escapeHTML(s.course)}</td>
+                      <td class="px-4 py-3.5 font-semibold text-slate-900">${Number(s.cgpa).toFixed(2)}</td>
+                      <td class="px-4 py-3.5">
+                        <span class="px-2 py-0.5 rounded-md text-xs font-semibold ${s.backlogs === 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${s.backlogs}</span>
+                      </td>
+                      <td class="px-4 py-3.5">${statusBadge(s.status)}</td>
+                      <td class="px-4 py-3.5 text-right whitespace-nowrap space-x-1.5">
+                        <button onclick="openStudentModal('${escapeHTML(s.student_id)}')" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition">Edit</button>
+                        <button onclick="toggleStudentStatus('${escapeHTML(s.student_id)}')" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold ${s.status === 'ACTIVE' ? 'text-rose-700 bg-rose-50 hover:bg-rose-100' : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'} transition">
+                          ${s.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                        </button>
+                      </td>
+                    </tr>
+                  `).join('') : `<tr><td colspan="7" class="px-5 py-8 text-center text-slate-400">No student records matched your search.</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openStudentModal(studentId = null) {
+      const s = studentId ? getStudentById(studentId) : null;
+      const isEdit = Boolean(s);
+      const suggestedId = isEdit ? s.student_id : String(2413020250 + DB.students.length);
+
+      openModal(isEdit ? `Edit Student (${s.student_id})` : 'Add New Student', `
+        <form onsubmit="saveStudentForm(event, ${isEdit ? `'${escapeHTML(s.student_id)}'` : 'null'})" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Student / Learner ID (Unique) *</label>
+              <input id="stu-id" type="text" required ${isEdit ? 'disabled' : ''} value="${escapeHTML(suggestedId)}"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm ${isEdit ? 'bg-slate-100 text-slate-500' : 'focus:border-blue-500'} outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Status</label>
+              <select id="stu-status" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:border-blue-500 outline-none">
+                <option value="ACTIVE" ${(s?.status || 'ACTIVE') === 'ACTIVE' ? 'selected' : ''}>ACTIVE</option>
+                <option value="INACTIVE" ${s?.status === 'INACTIVE' ? 'selected' : ''}>INACTIVE</option>
+              </select>
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Full Name *</label>
+              <input id="stu-name" type="text" required value="${escapeHTML(s?.name || '')}" placeholder="e.g. Aarav Sharma"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Phone Number *</label>
+              <input id="stu-phone" type="tel" required value="${escapeHTML(s?.phone || '')}" placeholder="10-digit mobile number"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Course *</label>
+              <select id="stu-course" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:border-blue-500 outline-none">
+                ${['BCA', 'MCA', 'B.Tech CSE', 'B.Sc IT', 'MBA'].map(c => `<option value="${c}" ${(s?.course || 'BCA') === c ? 'selected' : ''}>${c}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">CGPA (0.00 – 10.00) *</label>
+              <input id="stu-cgpa" type="number" step="0.01" min="0" max="10" required value="${s ? s.cgpa : '7.50'}"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Active Backlogs (0+) *</label>
+              <input id="stu-backlogs" type="number" min="0" max="20" required value="${s ? s.backlogs : '0'}"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200">Cancel</button>
+            <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700">${isEdit ? 'Save Changes' : 'Add Student'}</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveStudentForm(event, existingId) {
+      event.preventDefault();
+      const student_id = existingId ? String(existingId) : document.getElementById('stu-id').value.trim();
+      const name = document.getElementById('stu-name').value.trim();
+      const phone = document.getElementById('stu-phone').value.trim();
+      const course = document.getElementById('stu-course').value;
+      const status = document.getElementById('stu-status').value;
+      const cgpa = parseFloat(document.getElementById('stu-cgpa').value);
+      const backlogs = parseInt(document.getElementById('stu-backlogs').value, 10);
+
+      if (!student_id) {
+        showToast('Student ID is required.', 'error');
+        return;
+      }
+      if (isNaN(cgpa) || cgpa < 0 || cgpa > 10) {
+        showToast('CGPA must be between 0.00 and 10.00.', 'error');
+        return;
+      }
+      if (isNaN(backlogs) || backlogs < 0) {
+        showToast('Backlogs must be 0 or greater.', 'error');
+        return;
+      }
+
+      if (!existingId && DB.students.some(s => String(s.student_id).toLowerCase() === student_id.toLowerCase())) {
+        showToast('A student with this Student ID already exists.', 'error');
+        return;
+      }
+
+      if (existingId) {
+        const s = getStudentById(existingId);
+        Object.assign(s, { name, phone, course, cgpa, backlogs, status });
+        showToast(`Student ${name} updated successfully.`, 'success');
+      } else {
+        DB.students.push({ student_id, name, phone, course, cgpa, backlogs, status });
+        showToast(`Student ${name} added successfully.`, 'success');
+      }
+      saveDB();
+      closeModal();
+      render();
+    }
+
+    function toggleStudentStatus(studentId) {
+      const s = getStudentById(studentId);
+      if (!s) return;
+      const nextStatus = s.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      showConfirm(
+        `${nextStatus === 'INACTIVE' ? 'Deactivate' : 'Activate'} Student?`,
+        `Set ${s.name} (ID: ${s.student_id}) to ${nextStatus}?`,
+        () => {
+          s.status = nextStatus;
+          saveDB();
+          showToast(`Student marked as ${nextStatus}.`, 'info');
+          render();
+        },
+        nextStatus === 'INACTIVE' ? 'Deactivate' : 'Activate',
+        nextStatus === 'INACTIVE'
+      );
+    }
+
+    /* =========================================================================
+       10. MODULE 3: COMPANY MANAGEMENT (CRUD — NO CONTACT EMAIL)
+       ========================================================================= */
+    function renderAdminCompanies() {
+      const q = state.companySearch.toLowerCase();
+      const filtered = DB.companies.filter(c =>
+        !q
+        || c.company_name.toLowerCase().includes(q)
+        || (c.location || '').toLowerCase().includes(q)
+        || (c.contact_person || '').toLowerCase().includes(q)
+        || (c.contact_phone || '').toLowerCase().includes(q)
+      );
+
+      return `
+        <div class="space-y-5">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-2xl font-extrabold text-slate-900">Company Management</h2>
+              <p class="text-sm text-slate-500">Maintain campus recruiting organizations, locations, and coordinator phone contacts.</p>
+            </div>
+            <button onclick="openCompanyModal()" class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-xs transition">
+              + Add Company
+            </button>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200/80 p-4">
+            <input type="text" value="${escapeHTML(state.companySearch)}"
+              oninput="state.companySearch = this.value; render();"
+              placeholder="Search companies by name, location, coordinator, or phone..."
+              class="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none" />
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            ${filtered.length ? filtered.map(c => {
+              const jobCount = DB.jobs.filter(j => Number(j.company_id) === Number(c.company_id)).length;
+              return `
+                <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col justify-between gap-4">
+                  <div>
+                    <div class="flex items-start justify-between gap-2">
+                      <div>
+                        <span class="text-xs font-mono text-slate-400">COMP #${c.company_id}</span>
+                        <h3 class="text-base font-bold text-slate-900">${escapeHTML(c.company_name)}</h3>
+                      </div>
+                      ${statusBadge(c.status)}
+                    </div>
+                    <div class="mt-3 space-y-1 text-xs text-slate-600">
+                      <div><span class="font-semibold text-slate-700">Location:</span> ${escapeHTML(c.location || 'N/A')}</div>
+                      <div><span class="font-semibold text-slate-700">Contact Person:</span> ${escapeHTML(c.contact_person || 'N/A')}</div>
+                      <div><span class="font-semibold text-slate-700">Contact Phone:</span> ${escapeHTML(c.contact_phone || 'N/A')}</div>
+                      <div><span class="font-semibold text-slate-700">Published Jobs:</span> ${jobCount}</div>
+                    </div>
+                  </div>
+                  <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button onclick="openCompanyModal(${c.company_id})" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition">Edit</button>
+                    <button onclick="toggleCompanyStatus(${c.company_id})" class="px-3 py-1.5 rounded-lg text-xs font-semibold ${c.status === 'ACTIVE' ? 'text-rose-700 bg-rose-50 hover:bg-rose-100' : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'} transition">
+                      ${c.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('') : `<div class="col-span-full bg-white rounded-2xl p-8 text-center text-slate-400 border border-slate-200">No companies matched your search.</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function openCompanyModal(companyId = null) {
+      const c = companyId ? getCompanyById(companyId) : null;
+      const isEdit = Boolean(c);
+      openModal(isEdit ? `Edit Company #${c.company_id}` : 'Add Recruiting Company', `
+        <form onsubmit="saveCompanyForm(event, ${isEdit ? c.company_id : 'null'})" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Company Name *</label>
+            <input id="comp-name" type="text" required value="${escapeHTML(c?.company_name || '')}" placeholder="e.g. HCL Technologies"
+              class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Location *</label>
+            <input id="comp-location" type="text" required value="${escapeHTML(c?.location || '')}" placeholder="e.g. Noida / Bengaluru"
+              class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Contact Person *</label>
+              <input id="comp-person" type="text" required value="${escapeHTML(c?.contact_person || '')}" placeholder="e.g. HR Manager Name"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Contact Phone *</label>
+              <input id="comp-phone" type="tel" required value="${escapeHTML(c?.contact_phone || '')}" placeholder="e.g. 0120-4012000"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Status</label>
+            <select id="comp-status" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:border-blue-500 outline-none">
+              <option value="ACTIVE" ${(c?.status || 'ACTIVE') === 'ACTIVE' ? 'selected' : ''}>ACTIVE</option>
+              <option value="INACTIVE" ${c?.status === 'INACTIVE' ? 'selected' : ''}>INACTIVE</option>
+            </select>
+          </div>
+          <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200">Cancel</button>
+            <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700">${isEdit ? 'Update Company' : 'Save Company'}</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveCompanyForm(event, companyId) {
+      event.preventDefault();
+      const company_name = document.getElementById('comp-name').value.trim();
+      const location = document.getElementById('comp-location').value.trim();
+      const contact_person = document.getElementById('comp-person').value.trim();
+      const contact_phone = document.getElementById('comp-phone').value.trim();
+      const status = document.getElementById('comp-status').value;
+
+      if (companyId) {
+        const c = getCompanyById(companyId);
+        Object.assign(c, { company_name, location, contact_person, contact_phone, status });
+        showToast('Company updated successfully.', 'success');
+      } else {
+        DB.companies.push({
+          company_id: nextNumericId(DB.companies, 'company_id', 201),
+          company_name, location, contact_person, contact_phone, status
+        });
+        showToast('Company added successfully.', 'success');
+      }
+      saveDB();
+      closeModal();
+      render();
+    }
+
+    function toggleCompanyStatus(companyId) {
+      const c = getCompanyById(companyId);
+      if (!c) return;
+      c.status = c.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      saveDB();
+      showToast(`${c.company_name} marked as ${c.status}.`, 'info');
+      render();
+    }
+
+    /* =========================================================================
+       11. MODULE 4: JOB MANAGEMENT (PUBLISH, EDIT, OPEN/CLOSE)
+       ========================================================================= */
+    function renderAdminJobs() {
+      const q = state.jobSearch.toLowerCase();
+      const filtered = DB.jobs.filter(j => {
+        const comp = getCompanyById(j.company_id);
+        const matchesStatus = state.jobStatusFilter === 'ALL' || j.status === state.jobStatusFilter;
+        const matchesQuery = !q || j.title.toLowerCase().includes(q) || (comp?.company_name || '').toLowerCase().includes(q);
+        return matchesStatus && matchesQuery;
+      });
+
+      return `
+        <div class="space-y-5">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-2xl font-extrabold text-slate-900">Job Openings Management</h2>
+              <p class="text-sm text-slate-500">Publish drives with minimum CGPA, maximum backlog limits, and closing dates.</p>
+            </div>
+            <button onclick="openJobModal()" class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-xs transition">
+              + Publish Job
+            </button>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200/80 p-4 flex flex-col sm:flex-row gap-3">
+            <input type="text" value="${escapeHTML(state.jobSearch)}"
+              oninput="state.jobSearch = this.value; render();"
+              placeholder="Search jobs by title or company name..."
+              class="flex-1 px-4 py-2 rounded-xl border border-slate-200 text-sm focus:border-blue-500 outline-none" />
+            <select onchange="state.jobStatusFilter = this.value; render();"
+              class="px-4 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:border-blue-500 outline-none">
+              <option value="ALL" ${state.jobStatusFilter === 'ALL' ? 'selected' : ''}>All Jobs</option>
+              <option value="OPEN" ${state.jobStatusFilter === 'OPEN' ? 'selected' : ''}>Open Only</option>
+              <option value="CLOSED" ${state.jobStatusFilter === 'CLOSED' ? 'selected' : ''}>Closed Only</option>
+            </select>
+          </div>
+
+          <div class="space-y-3">
+            ${filtered.length ? filtered.map(j => {
+              const comp = getCompanyById(j.company_id);
+              const appCount = DB.applications.filter(a => Number(a.job_id) === Number(j.job_id)).length;
+              const eligibleCount = DB.students.filter(s => checkEligibility(s, j).eligible).length;
+              const isExpired = j.last_date && j.last_date < getTodayISO();
+
+              return `
+                <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-xs font-mono text-slate-400">JOB #${j.job_id}</span>
+                        <h3 class="text-base font-bold text-slate-900">${escapeHTML(j.title)}</h3>
+                        ${statusBadge(j.status)}
+                        ${isExpired && j.status === 'OPEN' ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">Deadline Passed</span>` : ''}
+                      </div>
+                      <p class="text-xs font-semibold text-blue-700 mt-1">${escapeHTML(comp?.company_name || 'Unknown')} • ${escapeHTML(comp?.location || '')}</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <button onclick="openJobModal(${j.job_id})" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition">Edit</button>
+                      <button onclick="toggleJobStatus(${j.job_id})" class="px-3 py-1.5 rounded-lg text-xs font-semibold ${j.status === 'OPEN' ? 'text-rose-700 bg-rose-50 hover:bg-rose-100' : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'} transition">
+                        ${j.status === 'OPEN' ? 'Close Job' : 'Reopen Job'}
+                      </button>
+                    </div>
+                  </div>
+                  <p class="text-sm text-slate-600 mt-3 leading-relaxed">${escapeHTML(j.description)}</p>
+                  <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600">
+                    <span><strong class="text-slate-800">Min CGPA:</strong> ${Number(j.min_cgpa).toFixed(2)}</span>
+                    <span><strong class="text-slate-800">Max Backlogs:</strong> ${j.max_backlogs}</span>
+                    <span><strong class="text-slate-800">Last Date:</strong> ${escapeHTML(j.last_date)}</span>
+                    <span><strong class="text-slate-800">Eligible Active Students:</strong> ${eligibleCount}</span>
+                    <span><strong class="text-slate-800">Applications:</strong> ${appCount}</span>
+                  </div>
+                </div>
+              `;
+            }).join('') : `<div class="bg-white rounded-2xl p-8 text-center text-slate-400 border border-slate-200">No job openings matched your filter.</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function openJobModal(jobId = null) {
+      const j = jobId ? getJobById(jobId) : null;
+      const isEdit = Boolean(j);
+      const companies = DB.companies.filter(c => c.status === 'ACTIVE' || (j && Number(c.company_id) === Number(j.company_id)));
+
+      openModal(isEdit ? `Edit Job #${j.job_id}` : 'Publish New Job Opening', `
+        <form onsubmit="saveJobForm(event, ${isEdit ? j.job_id : 'null'})" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Company *</label>
+              <select id="job-company" required class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:border-blue-500 outline-none">
+                ${companies.map(c => `<option value="${c.company_id}" ${j && Number(j.company_id) === Number(c.company_id) ? 'selected' : ''}>${escapeHTML(c.company_name)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Job Title *</label>
+              <input id="job-title" type="text" required value="${escapeHTML(j?.title || '')}" placeholder="e.g. Junior Software Engineer"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Job Description *</label>
+              <textarea id="job-desc" rows="3" required class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none">${escapeHTML(j?.description || '')}</textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Minimum CGPA *</label>
+              <input id="job-cgpa" type="number" step="0.01" min="0" max="10" required value="${j ? j.min_cgpa : '7.00'}"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Maximum Backlogs *</label>
+              <input id="job-backlogs" type="number" min="0" max="15" required value="${j ? j.max_backlogs : '0'}"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Application Deadline *</label>
+              <input id="job-date" type="date" required value="${j ? j.last_date : getOffsetDateISO(21)}"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Status</label>
+              <select id="job-status" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:border-blue-500 outline-none">
+                <option value="OPEN" ${(j?.status || 'OPEN') === 'OPEN' ? 'selected' : ''}>OPEN</option>
+                <option value="CLOSED" ${j?.status === 'CLOSED' ? 'selected' : ''}>CLOSED</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200">Cancel</button>
+            <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700">${isEdit ? 'Update Job' : 'Publish Job'}</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveJobForm(event, jobId) {
+      event.preventDefault();
+      const company_id = Number(document.getElementById('job-company').value);
+      const title = document.getElementById('job-title').value.trim();
+      const description = document.getElementById('job-desc').value.trim();
+      const min_cgpa = parseFloat(document.getElementById('job-cgpa').value);
+      const max_backlogs = parseInt(document.getElementById('job-backlogs').value, 10);
+      const last_date = document.getElementById('job-date').value;
+      const status = document.getElementById('job-status').value;
+
+      if (isNaN(min_cgpa) || min_cgpa < 0 || min_cgpa > 10) {
+        showToast('Minimum CGPA must be between 0.00 and 10.00.', 'error');
+        return;
+      }
+      if (jobId) {
+        const j = getJobById(jobId);
+        Object.assign(j, { company_id, title, description, min_cgpa, max_backlogs, last_date, status });
+        showToast('Job opening updated.', 'success');
+      } else {
+        DB.jobs.push({
+          job_id: nextNumericId(DB.jobs, 'job_id', 301),
+          company_id, title, description, min_cgpa, max_backlogs, last_date, status
+        });
+        showToast('Job opening published!', 'success');
+      }
+      saveDB();
+      closeModal();
+      render();
+    }
+
+    function toggleJobStatus(jobId) {
+      const j = getJobById(jobId);
+      if (!j) return;
+      j.status = j.status === 'OPEN' ? 'CLOSED' : 'OPEN';
+      saveDB();
+      showToast(`Job "${j.title}" is now ${j.status}.`, 'info');
+      render();
+    }
+
+    /* =========================================================================
+       12. MODULE 6: APPLICATIONS, INTERVIEWS & RESULTS (ADMIN)
+       ========================================================================= */
+    function renderAdminApplications() {
+      const q = state.appSearch.toLowerCase();
+      const filtered = DB.applications.filter(a => {
+        const stu = getStudentById(a.student_id);
+        const matchesJob = state.appJobFilter === 'ALL' || String(a.job_id) === String(state.appJobFilter);
+        const matchesStatus = state.appStatusFilter === 'ALL' || a.status === state.appStatusFilter;
+        const matchesSearch = !q
+          || (stu?.name || '').toLowerCase().includes(q)
+          || String(stu?.student_id || '').toLowerCase().includes(q);
+        return matchesJob && matchesStatus && matchesSearch;
+      }).reverse();
+
+      return `
+        <div class="space-y-5">
+          <div>
+            <h2 class="text-2xl font-extrabold text-slate-900">Applications, Interviews & Results</h2>
+            <p class="text-sm text-slate-500">Filter applications, update stages, schedule interview rounds, and record final offers.</p>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-slate-200/80 p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <input type="text" value="${escapeHTML(state.appSearch)}"
+              oninput="state.appSearch = this.value; render();"
+              placeholder="Search by student name or Learner ID..."
+              class="px-4 py-2 rounded-xl border border-slate-200 text-sm focus:border-blue-500 outline-none" />
+            <select onchange="state.appJobFilter = this.value; render();"
+              class="px-4 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:border-blue-500 outline-none">
+              <option value="ALL">All Jobs</option>
+              ${DB.jobs.map(j => {
+                const c = getCompanyById(j.company_id);
+                return `<option value="${j.job_id}" ${String(state.appJobFilter) === String(j.job_id) ? 'selected' : ''}>${escapeHTML(j.title)} (${escapeHTML(c?.company_name || '')})</option>`;
+              }).join('')}
+            </select>
+            <select onchange="state.appStatusFilter = this.value; render();"
+              class="px-4 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:border-blue-500 outline-none">
+              <option value="ALL">All Statuses</option>
+              ${['APPLIED', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'SELECTED', 'REJECTED'].map(st =>
+                `<option value="${st}" ${state.appStatusFilter === st ? 'selected' : ''}>${st.replace(/_/g, ' ')}</option>`
+              ).join('')}
+            </select>
+          </div>
+
+          <div class="space-y-3">
+            ${filtered.length ? filtered.map(app => {
+              const stu = getStudentById(app.student_id);
+              const job = getJobById(app.job_id);
+              const comp = job ? getCompanyById(job.company_id) : null;
+              const interviews = getInterviewsForApp(app.application_id);
+              const res = getResultForApp(app.application_id);
+
+              return `
+                <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-xs font-mono text-slate-400">APP #${app.application_id}</span>
+                        <h3 class="text-base font-bold text-slate-900">${escapeHTML(stu?.name || 'Unknown')}</h3>
+                        ${statusBadge(app.status)}
+                      </div>
+                      <p class="text-xs text-slate-500 mt-1">
+                        ID: ${escapeHTML(stu?.student_id || '-')} • ${escapeHTML(stu?.course || '-')} • CGPA ${stu ? Number(stu.cgpa).toFixed(2) : '-'} • Backlogs: ${stu?.backlogs ?? '-'} • Applied: ${escapeHTML(app.applied_on)}
+                      </p>
+                      <p class="text-sm font-semibold text-blue-700 mt-1.5">
+                        ${escapeHTML(job?.title || 'Unknown Job')} <span class="font-normal text-slate-500">at ${escapeHTML(comp?.company_name || '')}</span>
+                      </p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                      <select onchange="updateApplicationStatus(${app.application_id}, this.value)"
+                        class="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold bg-slate-50 focus:border-blue-500 outline-none">
+                        ${['APPLIED', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'SELECTED', 'REJECTED'].map(st =>
+                          `<option value="${st}" ${app.status === st ? 'selected' : ''}>${st.replace(/_/g, ' ')}</option>`
+                        ).join('')}
+                      </select>
+                      <button onclick="openInterviewModal(${app.application_id})" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition">
+                        + Interview (${interviews.length})
+                      </button>
+                      <button onclick="openResultModal(${app.application_id})" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition">
+                        ${res ? 'Edit Result' : 'Record Result'}
+                      </button>
+                    </div>
+                  </div>
+
+                  ${(interviews.length || res) ? `
+                    <div class="pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      <div class="bg-slate-50 rounded-xl p-3">
+                        <div class="font-bold text-slate-700 mb-1.5">Interview Rounds (${interviews.length})</div>
+                        ${interviews.length ? interviews.map(iv => `
+                          <div class="py-1.5 border-b last:border-b-0 border-slate-200/70">
+                            <div class="font-semibold text-slate-800">${escapeHTML(iv.round_name)} <span class="font-normal text-slate-500">• ${formatDateTime(iv.interview_date)}</span></div>
+                            <div class="text-slate-600">${escapeHTML(iv.remarks || 'No remarks')}</div>
+                          </div>
+                        `).join('') : '<span class="text-slate-400">No rounds scheduled yet.</span>'}
+                      </div>
+                      <div class="bg-slate-50 rounded-xl p-3">
+                        <div class="font-bold text-slate-700 mb-1.5">Final Placement Outcome</div>
+                        ${res ? `
+                          <div class="flex items-center gap-2 mt-1">
+                            ${statusBadge(res.result_status)}
+                            ${res.result_status === 'SELECTED' && Number(res.package_lpa) > 0
+                              ? `<span class="font-bold text-emerald-700 text-sm">${Number(res.package_lpa).toFixed(2)} LPA</span>`
+                              : ''}
+                          </div>
+                        ` : '<span class="text-slate-400">Final result pending.</span>'}
+                      </div>
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+            }).join('') : `<div class="bg-white rounded-2xl p-8 text-center text-slate-400 border border-slate-200">No applications found for selected filters.</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function updateApplicationStatus(appId, newStatus) {
+      const app = getApplicationById(appId);
+      if (!app) return;
+      app.status = newStatus;
+      saveDB();
+      showToast(`Application #${appId} updated to ${newStatus.replace(/_/g, ' ')}.`, 'success');
+      render();
+    }
+
+    function openInterviewModal(appId) {
+      const app = getApplicationById(appId);
+      const stu = getStudentById(app.student_id);
+      const job = getJobById(app.job_id);
+      const existing = getInterviewsForApp(appId);
+
+      openModal(`Schedule Interview — ${stu?.name || ''}`, `
+        <div class="space-y-5">
+          <div class="text-xs bg-blue-50 text-blue-900 px-3.5 py-2.5 rounded-xl">
+            <strong>Job:</strong> ${escapeHTML(job?.title || '')} • <strong>App #${appId}</strong>
+          </div>
+
+          <form onsubmit="saveInterviewForm(event, ${appId})" class="space-y-3.5">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Round Name *</label>
+              <input id="iv-round" type="text" required placeholder="e.g. Aptitude / Technical Round 1 / HR Round"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Interview Date & Time *</label>
+              <input id="iv-date" type="datetime-local" required value="${getOffsetDateISO(2)}T11:00"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Remarks / Venue</label>
+              <textarea id="iv-remarks" rows="2" placeholder="e.g. Placement Cell Seminar Hall"
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none"></textarea>
+            </div>
+            <div class="flex justify-end gap-2">
+              <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200">Close</button>
+              <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700">Schedule Round</button>
+            </div>
+          </form>
+
+          ${existing.length ? `
+            <div class="pt-4 border-t border-slate-100">
+              <div class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Scheduled Rounds</div>
+              <div class="space-y-2">
+                ${existing.map(iv => `
+                  <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-xs flex justify-between gap-2">
+                    <div>
+                      <div class="font-bold text-slate-800">${escapeHTML(iv.round_name)}</div>
+                      <div class="text-slate-500">${formatDateTime(iv.interview_date)}</div>
+                      <div class="text-slate-600 mt-0.5">${escapeHTML(iv.remarks || '')}</div>
+                    </div>
+                    <button onclick="deleteInterview(${iv.interview_id}, ${appId})" class="text-rose-500 hover:text-rose-700 font-semibold self-start">Remove</button>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `);
+    }
+
+    function saveInterviewForm(event, appId) {
+      event.preventDefault();
+      const round_name = document.getElementById('iv-round').value.trim();
+      const interview_date = document.getElementById('iv-date').value;
+      const remarks = document.getElementById('iv-remarks').value.trim();
+
+      DB.interviews.push({
+        interview_id: nextNumericId(DB.interviews, 'interview_id', 501),
+        application_id: appId,
+        interview_date,
+        round_name,
+        remarks
+      });
+      const app = getApplicationById(appId);
+      if (app && (app.status === 'APPLIED' || app.status === 'SHORTLISTED')) {
+        app.status = 'INTERVIEW_SCHEDULED';
+      }
+      saveDB();
+      showToast('Interview round scheduled successfully.', 'success');
+      closeModal();
+      render();
+    }
+
+    function deleteInterview(interviewId, appId) {
+      DB.interviews = DB.interviews.filter(iv => Number(iv.interview_id) !== Number(interviewId));
+      saveDB();
+      showToast('Interview round removed.', 'info');
+      openInterviewModal(appId);
+      render();
+    }
+
+    function openResultModal(appId) {
+      const app = getApplicationById(appId);
+      const stu = getStudentById(app.student_id);
+      const job = getJobById(app.job_id);
+      const existing = getResultForApp(appId);
+
+      openModal(`Final Result — ${stu?.name || ''}`, `
+        <form onsubmit="saveResultForm(event, ${appId})" class="space-y-4">
+          <div class="text-xs bg-slate-50 border border-slate-200 px-3.5 py-2.5 rounded-xl text-slate-700">
+            <strong>Job:</strong> ${escapeHTML(job?.title || '')} • <strong>App #${appId}</strong>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Result Status *</label>
+            <select id="res-status" required class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:border-blue-500 outline-none">
+              <option value="SELECTED" ${(existing?.result_status || 'SELECTED') === 'SELECTED' ? 'selected' : ''}>SELECTED</option>
+              <option value="REJECTED" ${existing?.result_status === 'REJECTED' ? 'selected' : ''}>REJECTED</option>
+              <option value="ON_HOLD" ${existing?.result_status === 'ON_HOLD' ? 'selected' : ''}>ON HOLD</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Package Offered (LPA)</label>
+            <input id="res-package" type="number" step="0.1" min="0" max="100" value="${existing ? existing.package_lpa : '4.5'}" placeholder="e.g. 5.5"
+              class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+            <p class="text-[11px] text-slate-400 mt-1">Recorded in Lakhs Per Annum (applicable when SELECTED).</p>
+          </div>
+          <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+            <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200">Cancel</button>
+            <button type="submit" class="px-5 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700">Save Final Result</button>
+          </div>
+        </form>
+      `);
+    }
+
+    function saveResultForm(event, appId) {
+      event.preventDefault();
+      const result_status = document.getElementById('res-status').value;
+      const package_lpa = result_status === 'SELECTED' ? (parseFloat(document.getElementById('res-package').value) || 0) : 0;
+
+      const existing = getResultForApp(appId);
+      if (existing) {
+        existing.result_status = result_status;
+        existing.package_lpa = package_lpa;
+      } else {
+        DB.results.push({
+          result_id: nextNumericId(DB.results, 'result_id', 601),
+          application_id: appId,
+          result_status,
+          package_lpa
+        });
+      }
+
+      const app = getApplicationById(appId);
+      if (app && (result_status === 'SELECTED' || result_status === 'REJECTED')) {
+        app.status = result_status;
+      }
+
+      saveDB();
+      showToast('Final placement result saved.', 'success');
+      closeModal();
+      render();
+    }
+
+    /* =========================================================================
+       13. MODULE 7: ALL 7 PLACEMENT REPORTS (PRINT + CSV EXPORT)
+       ========================================================================= */
+    const REPORT_TABS = [
+      { id: 'students', label: '1. Student Master List' },
+      { id: 'companies', label: '2. Company Directory' },
+      { id: 'jobs', label: '3. Job Openings' },
+      { id: 'eligible', label: '4. Eligible Students/Job' },
+      { id: 'job_apps', label: '5. Job-wise Applications' },
+      { id: 'interviews', label: '6. Interview Schedule' },
+      { id: 'placement', label: '7. Final Placement Report' }
+    ];
+
+    function getActiveReportData() {
+      const tab = state.activeReport;
+      if (tab === 'students') {
+        return {
+          title: '1. Student Master List',
+          filename: 'student_master_list.csv',
+          headers: ['Student ID', 'Full Name', 'Phone', 'Course', 'CGPA', 'Backlogs', 'Status'],
+          rows: DB.students.map(s => [
+            s.student_id, s.name, s.phone || '-', s.course, Number(s.cgpa).toFixed(2), s.backlogs, s.status
+          ])
+        };
+      }
+      if (tab === 'companies') {
+        return {
+          title: '2. Company Directory',
+          filename: 'company_directory.csv',
+          headers: ['Company ID', 'Company Name', 'Location', 'Contact Person', 'Contact Phone', 'Status', 'Total Jobs'],
+          rows: DB.companies.map(c => [
+            c.company_id, c.company_name, c.location || '-', c.contact_person || '-', c.contact_phone || '-', c.status,
+            DB.jobs.filter(j => Number(j.company_id) === Number(c.company_id)).length
+          ])
+        };
+      }
+      if (tab === 'jobs') {
+        return {
+          title: '3. Job Openings Report',
+          filename: 'job_openings_report.csv',
+          headers: ['Job ID', 'Company', 'Job Title', 'Min CGPA', 'Max Backlogs', 'Deadline', 'Status', 'Applications'],
+          rows: DB.jobs.map(j => [
+            j.job_id, getCompanyById(j.company_id)?.company_name || '-', j.title,
+            Number(j.min_cgpa).toFixed(2), j.max_backlogs, j.last_date, j.status,
+            DB.applications.filter(a => Number(a.job_id) === Number(j.job_id)).length
+          ])
+        };
+      }
+      if (tab === 'eligible') {
+        if (!state.eligibleReportJobId && DB.jobs.length) {
+          state.eligibleReportJobId = DB.jobs[0].job_id;
+        }
+        const job = getJobById(state.eligibleReportJobId);
+        const comp = job ? getCompanyById(job.company_id) : null;
+        const eligibleStudents = job
+          ? DB.students.filter(s => s.status === 'ACTIVE' && Number(s.cgpa) >= Number(job.min_cgpa) && Number(s.backlogs) <= Number(job.max_backlogs))
+          : [];
+        return {
+          title: job ? `4. Eligible Students for "${job.title}" (${comp?.company_name || ''})` : '4. Eligible Students per Job',
+          filename: `eligible_students_job_${job?.job_id || 'none'}.csv`,
+          headers: ['Student ID', 'Full Name', 'Phone', 'Course', 'CGPA', 'Backlogs', 'Already Applied?'],
+          rows: eligibleStudents.map(s => {
+            const applied = DB.applications.some(a => String(a.student_id) === String(s.student_id) && Number(a.job_id) === Number(job.job_id));
+            return [s.student_id, s.name, s.phone || '-', s.course, Number(s.cgpa).toFixed(2), s.backlogs, applied ? 'Yes' : 'No'];
+          })
+        };
+      }
+      if (tab === 'job_apps') {
+        return {
+          title: '5. Job-wise Applications & Status Summary',
+          filename: 'job_wise_applications.csv',
+          headers: ['App ID', 'Job Title', 'Company', 'Student ID', 'Student Name', 'Course', 'CGPA', 'Applied On', 'Status'],
+          rows: DB.applications.map(a => {
+            const stu = getStudentById(a.student_id);
+            const job = getJobById(a.job_id);
+            const comp = job ? getCompanyById(job.company_id) : null;
+            return [
+              a.application_id, job?.title || '-', comp?.company_name || '-',
+              stu?.student_id || '-', stu?.name || '-', stu?.course || '-',
+              stu ? Number(stu.cgpa).toFixed(2) : '-', a.applied_on, a.status
+            ];
+          })
+        };
+      }
+      if (tab === 'interviews') {
+        return {
+          title: '6. Interview Schedule & Round Status',
+          filename: 'interview_schedule_report.csv',
+          headers: ['Interview ID', 'Date & Time', 'Round Name', 'Student', 'Company', 'Job Title', 'App Status', 'Remarks'],
+          rows: DB.interviews.map(iv => {
+            const app = getApplicationById(iv.application_id);
+            const stu = app ? getStudentById(app.student_id) : null;
+            const job = app ? getJobById(app.job_id) : null;
+            const comp = job ? getCompanyById(job.company_id) : null;
+            return [
+              iv.interview_id, formatDateTime(iv.interview_date), iv.round_name,
+              stu?.name || '-', comp?.company_name || '-', job?.title || '-',
+              app?.status || '-', iv.remarks || '-'
+            ];
+          })
+        };
+      }
+      // 7. Final Placement Report
+      const selected = DB.results.filter(r => r.result_status === 'SELECTED');
+      return {
+        title: '7. Final Placement Report (Selected Students & Packages)',
+        filename: 'final_placement_report.csv',
+        headers: ['Student ID', 'Student Name', 'Course', 'CGPA', 'Company', 'Job Role', 'Package (LPA)'],
+        rows: selected.map(r => {
+          const app = getApplicationById(r.application_id);
+          const stu = app ? getStudentById(app.student_id) : null;
+          const job = app ? getJobById(app.job_id) : null;
+          const comp = job ? getCompanyById(job.company_id) : null;
+          return [
+            stu?.student_id || '-', stu?.name || '-', stu?.course || '-',
+            stu ? Number(stu.cgpa).toFixed(2) : '-', comp?.company_name || '-',
+            job?.title || '-', Number(r.package_lpa).toFixed(2)
+          ];
+        })
+      };
+    }
+
+    function renderAdminReports() {
+      const report = getActiveReportData();
+      const kpi = computePlacementKPIs();
+
+      const jobSummaryHTML = state.activeReport === 'job_apps' ? `
+        <div class="mb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          ${DB.jobs.map(j => {
+            const apps = DB.applications.filter(a => Number(a.job_id) === Number(j.job_id));
+            const selected = apps.filter(a => a.status === 'SELECTED').length;
+            const shortlisted = apps.filter(a => a.status === 'SHORTLISTED' || a.status === 'INTERVIEW_SCHEDULED').length;
+            const comp = getCompanyById(j.company_id);
+            return `
+              <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs">
+                <div class="font-bold text-slate-900 truncate">${escapeHTML(j.title)}</div>
+                <div class="text-slate-500 truncate">${escapeHTML(comp?.company_name || '')}</div>
+                <div class="mt-2 flex items-center justify-between font-semibold">
+                  <span class="text-blue-700">Total: ${apps.length}</span>
+                  <span class="text-amber-700">In Process: ${shortlisted}</span>
+                  <span class="text-emerald-700">Selected: ${selected}</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      ` : '';
+
+      const placementSummaryHTML = state.activeReport === 'placement' ? `
+        <div class="mb-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+            <div class="text-xs font-semibold text-emerald-700 uppercase">Total Placed Students</div>
+            <div class="text-2xl font-extrabold text-emerald-900 mt-1">${kpi.placedCount}</div>
+          </div>
+          <div class="p-4 rounded-xl bg-blue-50 border border-blue-200">
+            <div class="text-xs font-semibold text-blue-700 uppercase">Highest Package</div>
+            <div class="text-2xl font-extrabold text-blue-900 mt-1">${kpi.highestLpa.toFixed(2)} LPA</div>
+          </div>
+          <div class="p-4 rounded-xl bg-sky-50 border border-sky-200">
+            <div class="text-xs font-semibold text-sky-700 uppercase">Average Package</div>
+            <div class="text-2xl font-extrabold text-sky-900 mt-1">${kpi.avgLpa.toFixed(2)} LPA</div>
+          </div>
+        </div>
+      ` : '';
+
+      return `
+        <div class="space-y-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 no-print">
+            <div>
+              <h2 class="text-2xl font-extrabold text-slate-900">Placement Reports</h2>
+              <p class="text-sm text-slate-500">All 7 campus placement reports with CSV Export and Print support.</p>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="exportActiveReportCSV()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow-xs transition">
+                ⬇ Export CSV
+              </button>
+              <button onclick="window.print()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold shadow-xs transition">
+                🖨 Print Report
+              </button>
+            </div>
+          </div>
+
+          <!-- 7 Report Tabs -->
+          <div class="flex flex-wrap gap-1.5 bg-white p-2 rounded-2xl border border-slate-200/80 no-print">
+            ${REPORT_TABS.map(t => `
+              <button onclick="state.activeReport = '${t.id}'; render();"
+                class="px-3 py-2 rounded-xl text-xs font-semibold transition ${
+                  state.activeReport === t.id
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }">
+                ${t.label}
+              </button>
+            `).join('')}
+          </div>
+
+          <!-- Printable Report Surface -->
+          <div id="report-printable-area" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-5 sm:p-6">
+            <div class="hidden print-only mb-4 pb-3 border-b-2 border-slate-800 text-center">
+              <h1 class="text-lg font-bold uppercase">Uttaranchal University, Dehradun</h1>
+              <p class="text-xs">Training & Placement Cell — Student Placement Management System</p>
+              <p class="text-xs mt-1">Generated on: ${new Date().toLocaleString('en-IN')}</p>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 class="text-lg font-bold text-slate-900">${escapeHTML(report.title)}</h3>
+                <p class="text-xs text-slate-500">Total Records: ${report.rows.length}</p>
+              </div>
+              ${state.activeReport === 'eligible' ? `
+                <div class="no-print">
+                  <select onchange="state.eligibleReportJobId = Number(this.value); render();"
+                    class="px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white focus:border-blue-500 outline-none max-w-full">
+                    ${DB.jobs.map(j => {
+                      const c = getCompanyById(j.company_id);
+                      return `<option value="${j.job_id}" ${Number(state.eligibleReportJobId) === Number(j.job_id) ? 'selected' : ''}>${escapeHTML(j.title)} — ${escapeHTML(c?.company_name || '')} (Min ${j.min_cgpa} CGPA, Max ${j.max_backlogs} BL)</option>`;
+                    }).join('')}
+                  </select>
+                </div>
+              ` : ''}
+            </div>
+
+            ${jobSummaryHTML}
+            ${placementSummaryHTML}
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm border-collapse">
+                <thead class="bg-slate-50 text-slate-600 text-xs uppercase">
+                  <tr>
+                    ${report.headers.map(h => `<th class="px-4 py-3 font-semibold border-b border-slate-200">${escapeHTML(h)}</th>`).join('')}
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  ${report.rows.length ? report.rows.map(row => `
+                    <tr class="hover:bg-slate-50/70">
+                      ${row.map(cell => `<td class="px-4 py-3 text-slate-700">${escapeHTML(cell)}</td>`).join('')}
+                    </tr>
+                  `).join('') : `<tr><td colspan="${report.headers.length}" class="px-4 py-8 text-center text-slate-400">No records available for this report.</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function exportActiveReportCSV() {
+      const report = getActiveReportData();
+      const csvEscape = val => {
+        const str = String(val ?? '');
+        if (/[",\n]/.test(str)) return '"' + str.replace(/"/g, '""') + '"';
+        return str;
+      };
+      const lines = [
+        report.headers.map(csvEscape).join(','),
+        ...report.rows.map(row => row.map(csvEscape).join(','))
+      ];
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = report.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Exported ${report.filename}`, 'success');
+    }
+
+    /* =========================================================================
+       14. MODULE 5: STUDENT PORTAL — DASHBOARD, ELIGIBILITY ENGINE & JOBS
+       ========================================================================= */
+    function renderStudentJobs() {
+      const student = getStudentById(state.session.id);
+      if (!student) return '';
+
+      const myApps = DB.applications.filter(a => String(a.student_id) === String(student.student_id));
+      const myAppIds = new Set(myApps.map(a => Number(a.application_id)));
+      const interviewsCount = DB.interviews.filter(iv => myAppIds.has(Number(iv.application_id))).length;
+      const offersCount = DB.results.filter(r => myAppIds.has(Number(r.application_id)) && r.result_status === 'SELECTED').length;
+      const eligibleCount = DB.jobs.filter(j => checkEligibility(student, j).eligible).length;
+
+      const q = state.studentJobSearch.toLowerCase();
+      const jobs = DB.jobs.filter(j => {
+        const comp = getCompanyById(j.company_id);
+        const matchesStatus = state.studentJobFilter === 'ALL' || j.status === state.studentJobFilter;
+        const matchesSearch = !q || j.title.toLowerCase().includes(q) || (comp?.company_name || '').toLowerCase().includes(q);
+        return matchesStatus && matchesSearch;
+      });
+
+      return `
+        <div class="space-y-6">
+          <!-- Student Dashboard Banner & Personal Stats -->
+          <div class="bg-gradient-to-r from-slate-900 via-blue-900 to-slate-900 text-white rounded-2xl p-6 shadow-md space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-blue-200">Student Dashboard</div>
+                <h2 class="text-xl sm:text-2xl font-extrabold mt-0.5">${escapeHTML(student.name)}</h2>
+                <p class="text-xs sm:text-sm text-blue-200 mt-1">Learner ID: ${escapeHTML(student.student_id)} • Course: ${escapeHTML(student.course)} • Phone: ${escapeHTML(student.phone || 'N/A')}</p>
+              </div>
+              <button onclick="switchTab('profile')" class="px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-xs font-semibold text-white transition">
+                ✎ Edit Academic Profile
+              </button>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+              <div class="bg-white/10 border border-white/15 rounded-xl p-3 text-center">
+                <div class="text-[11px] text-blue-200 uppercase">CGPA</div>
+                <div class="text-lg font-extrabold mt-0.5">${Number(student.cgpa).toFixed(2)}</div>
+              </div>
+              <div class="bg-white/10 border border-white/15 rounded-xl p-3 text-center">
+                <div class="text-[11px] text-blue-200 uppercase">Backlogs</div>
+                <div class="text-lg font-extrabold mt-0.5">${student.backlogs}</div>
+              </div>
+              <div class="bg-white/10 border border-white/15 rounded-xl p-3 text-center">
+                <div class="text-[11px] text-blue-200 uppercase">Eligible Jobs</div>
+                <div class="text-lg font-extrabold text-emerald-300 mt-0.5">${eligibleCount}</div>
+              </div>
+              <div class="bg-white/10 border border-white/15 rounded-xl p-3 text-center">
+                <div class="text-[11px] text-blue-200 uppercase">Applied</div>
+                <div class="text-lg font-extrabold text-sky-300 mt-0.5">${myApps.length}</div>
+              </div>
+              <div class="bg-white/10 border border-white/15 rounded-xl p-3 text-center">
+                <div class="text-[11px] text-blue-200 uppercase">Interviews</div>
+                <div class="text-lg font-extrabold text-amber-300 mt-0.5">${interviewsCount}</div>
+              </div>
+              <div class="bg-white/10 border border-white/15 rounded-xl p-3 text-center">
+                <div class="text-[11px] text-blue-200 uppercase">Offers</div>
+                <div class="text-lg font-extrabold text-emerald-300 mt-0.5">${offersCount}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Job Search & Status Filter -->
+          <div class="bg-white rounded-2xl border border-slate-200/80 p-4 flex flex-col sm:flex-row gap-3">
+            <input type="text" value="${escapeHTML(state.studentJobSearch)}"
+              oninput="state.studentJobSearch = this.value; render();"
+              placeholder="Search job openings by role or recruiting company..."
+              class="flex-1 px-4 py-2 rounded-xl border border-slate-200 text-sm focus:border-blue-500 outline-none" />
+            <select onchange="state.studentJobFilter = this.value; render();"
+              class="px-4 py-2 rounded-xl border border-slate-200 text-sm bg-white focus:border-blue-500 outline-none">
+              <option value="OPEN" ${state.studentJobFilter === 'OPEN' ? 'selected' : ''}>Active (OPEN) Jobs</option>
+              <option value="ALL" ${state.studentJobFilter === 'ALL' ? 'selected' : ''}>All Jobs (incl. Closed)</option>
+            </select>
+          </div>
+
+          <!-- Job Openings List with Live Eligibility Badges -->
+          <div class="space-y-4">
+            ${jobs.length ? jobs.map(j => {
+              const comp = getCompanyById(j.company_id);
+              const existingApp = myApps.find(a => Number(a.job_id) === Number(j.job_id));
+              const elig = checkEligibility(student, j);
+
+              return `
+                <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex flex-col gap-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div class="flex items-center gap-2 flex-wrap">
+                        <h3 class="text-lg font-bold text-slate-900">${escapeHTML(j.title)}</h3>
+                        ${statusBadge(j.status)}
+                      </div>
+                      <p class="text-xs font-semibold text-blue-700 mt-0.5">${escapeHTML(comp?.company_name || '')} • ${escapeHTML(comp?.location || '')}</p>
+                    </div>
+
+                    <div class="shrink-0">
+                      ${existingApp ? `
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/20">
+                          ✓ Already Applied (${existingApp.status.replace(/_/g, ' ')})
+                        </span>
+                      ` : elig.eligible ? `
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/25">
+                          ✓ Eligible
+                        </span>
+                      ` : `
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/25">
+                          ✕ Not Eligible — ${escapeHTML(elig.reasons.join('; '))}
+                        </span>
+                      `}
+                    </div>
+                  </div>
+
+                  <p class="text-sm text-slate-600 leading-relaxed">${escapeHTML(j.description)}</p>
+
+                  <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-600">
+                      <span><strong class="text-slate-800">Min CGPA:</strong> ${Number(j.min_cgpa).toFixed(2)}</span>
+                      <span><strong class="text-slate-800">Max Backlogs:</strong> ${j.max_backlogs}</span>
+                      <span><strong class="text-slate-800">Deadline:</strong> ${escapeHTML(j.last_date)}</span>
+                    </div>
+                    <div>
+                      ${existingApp ? `
+                        <button onclick="switchTab('applications')" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
+                          Track Application →
+                        </button>
+                      ` : elig.eligible ? `
+                        <button onclick="handleStudentApply(${j.job_id})" class="px-5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition">
+                          Apply Now
+                        </button>
+                      ` : `
+                        <button disabled class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 text-slate-400 cursor-not-allowed">
+                          Not Eligible
+                        </button>
+                      `}
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('') : `<div class="bg-white rounded-2xl p-8 text-center text-slate-400 border border-slate-200">No job openings matched your search.</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function handleStudentApply(jobId) {
+      const student = getStudentById(state.session.id);
+      const job = getJobById(jobId);
+      if (!student || !job) return;
+
+      const duplicate = DB.applications.find(
+        a => String(a.student_id) === String(student.student_id) && Number(a.job_id) === Number(job.job_id)
+      );
+      if (duplicate) {
+        showToast('You have already applied for this job opening.', 'warning');
+        return;
+      }
+
+      const elig = checkEligibility(student, job);
+      if (!elig.eligible) {
+        showToast(`Not eligible: ${elig.reasons.join(', ')}`, 'error');
+        return;
+      }
+
+      showConfirm(
+        'Submit Job Application?',
+        `Confirm application for "${job.title}" at ${getCompanyById(job.company_id)?.company_name || ''} using your current academic profile (CGPA ${Number(student.cgpa).toFixed(2)}, ${student.backlogs} backlogs).`,
+        () => {
+          DB.applications.push({
+            application_id: nextNumericId(DB.applications, 'application_id', 401),
+            student_id: student.student_id,
+            job_id: job.job_id,
+            applied_on: getTodayISO(),
+            status: 'APPLIED'
+          });
+          saveDB();
+          showToast(`Successfully applied to ${job.title}!`, 'success');
+          render();
+        },
+        'Submit Application'
+      );
+    }
+
+    /* =========================================================================
+       15. STUDENT PORTAL: MY APPLICATIONS TRACKER
+       ========================================================================= */
+    function renderStudentApplications() {
+      const student = getStudentById(state.session.id);
+      const myApps = DB.applications.filter(a => String(a.student_id) === String(student.student_id)).reverse();
+      const steps = ['APPLIED', 'SHORTLISTED', 'INTERVIEW_SCHEDULED', 'SELECTED'];
+
+      return `
+        <div class="space-y-5">
+          <div>
+            <h2 class="text-2xl font-extrabold text-slate-900">My Applications</h2>
+            <p class="text-sm text-slate-500">Track status progress, scheduled interview rounds, and final placement offers.</p>
+          </div>
+
+          ${myApps.length ? myApps.map(app => {
+            const job = getJobById(app.job_id);
+            const comp = job ? getCompanyById(job.company_id) : null;
+            const interviews = getInterviewsForApp(app.application_id);
+            const res = getResultForApp(app.application_id);
+            const isRejected = app.status === 'REJECTED';
+            const currentStepIdx = isRejected ? -1 : steps.indexOf(app.status);
+
+            return `
+              <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div class="text-xs font-mono text-slate-400">Application #${app.application_id} • Applied on ${escapeHTML(app.applied_on)}</div>
+                    <h3 class="text-lg font-bold text-slate-900 mt-0.5">${escapeHTML(job?.title || 'Unknown Job')}</h3>
+                    <p class="text-xs font-semibold text-blue-700">${escapeHTML(comp?.company_name || '')} • ${escapeHTML(comp?.location || '')}</p>
+                  </div>
+                  ${statusBadge(app.status)}
+                </div>
+
+                <!-- Visual Status Tracker -->
+                <div class="bg-slate-50 rounded-xl p-4">
+                  <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-3">Application Status Tracker</div>
+                  ${isRejected ? `
+                    <div class="flex items-center gap-2 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                      <span>✕</span> Not selected for this role. Continue exploring other open campus drives!
+                    </div>
+                  ` : `
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      ${steps.map((st, idx) => {
+                        const done = idx <= currentStepIdx;
+                        return `
+                          <div class="flex items-center gap-2 p-2.5 rounded-lg ${done ? 'bg-blue-600 text-white' : 'bg-white text-slate-400 border border-slate-200'}">
+                            <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${done ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}">${done ? '✓' : idx + 1}</span>
+                            <span class="text-xs font-semibold truncate">${st.replace(/_/g, ' ')}</span>
+                          </div>
+                        `;
+                      }).join('')}
+                    </div>
+                  `}
+                </div>
+
+                <!-- Interview Rounds & Final Offer -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div class="border border-slate-200/80 rounded-xl p-4">
+                    <div class="font-bold text-slate-800 mb-2">Scheduled Interview Rounds (${interviews.length})</div>
+                    ${interviews.length ? interviews.map(iv => `
+                      <div class="py-2 border-b last:border-b-0 border-slate-100">
+                        <div class="font-semibold text-blue-900">${escapeHTML(iv.round_name)}</div>
+                        <div class="text-slate-500 mt-0.5">📅 ${formatDateTime(iv.interview_date)}</div>
+                        <div class="text-slate-600 mt-0.5">${escapeHTML(iv.remarks || 'No remarks')}</div>
+                      </div>
+                    `).join('') : '<p class="text-slate-400">No interview rounds scheduled yet.</p>'}
+                  </div>
+
+                  <div class="border border-slate-200/80 rounded-xl p-4 flex flex-col justify-center">
+                    <div class="font-bold text-slate-800 mb-2">Final Offer / Outcome</div>
+                    ${res ? `
+                      <div class="space-y-1.5">
+                        <div>${statusBadge(res.result_status)}</div>
+                        ${res.result_status === 'SELECTED' ? `
+                          <div class="text-lg font-extrabold text-emerald-700 mt-1">Package Offered: ${Number(res.package_lpa).toFixed(2)} LPA</div>
+                          <p class="text-slate-500">Congratulations! Visit the Training & Placement Cell for offer formalities.</p>
+                        ` : `<p class="text-slate-500">Result finalized by the Placement Office.</p>`}
+                      </div>
+                    ` : '<p class="text-slate-400">Result will be displayed here once declared by the Placement Office.</p>'}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('') : `
+            <div class="bg-white rounded-2xl border border-slate-200 p-10 text-center">
+              <p class="text-slate-500 text-sm">You have not submitted any job applications yet.</p>
+              <button onclick="switchTab('jobs')" class="mt-4 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold">Browse Job Openings</button>
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    /* =========================================================================
+       16. STUDENT PORTAL: EDITABLE ACADEMIC PROFILE (NO EMAIL / NO PASSWORD)
+       ========================================================================= */
+    function renderStudentProfile() {
+      const student = getStudentById(state.session.id);
+      if (!student) return '';
+
+      return `
+        <div class="max-w-2xl space-y-5">
+          <div>
+            <h2 class="text-2xl font-extrabold text-slate-900">My Academic Profile</h2>
+            <p class="text-sm text-slate-500">Update your details below. Job eligibility across all open drives recalculates immediately upon saving.</p>
+          </div>
+
+          <form onsubmit="saveStudentOwnProfile(event)" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-500 mb-1">Student / Learner ID (Read-only)</label>
+                <input type="text" disabled value="${escapeHTML(student.student_id)}"
+                  class="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-sm font-mono text-slate-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
+                <input id="prof-name" type="text" required value="${escapeHTML(student.name)}"
+                  class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Phone Number *</label>
+                <input id="prof-phone" type="tel" required value="${escapeHTML(student.phone || '')}"
+                  class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Course *</label>
+                <select id="prof-course" class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:border-blue-500 outline-none">
+                  ${['BCA', 'MCA', 'B.Tech CSE', 'B.Sc IT', 'MBA'].map(c => `<option value="${c}" ${student.course === c ? 'selected' : ''}>${c}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Current CGPA (0.00 – 10.00) *</label>
+                <input id="prof-cgpa" type="number" step="0.01" min="0" max="10" required value="${student.cgpa}"
+                  class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Active Backlogs (0+) *</label>
+                <input id="prof-backlogs" type="number" min="0" max="20" required value="${student.backlogs}"
+                  class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:border-blue-500 outline-none" />
+              </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-100 flex justify-end gap-2">
+              <button type="button" onclick="switchTab('jobs')" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold transition">
+                Back to Jobs
+              </button>
+              <button type="submit" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow-xs transition">
+                Save Profile & Recalculate Eligibility
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+    }
+
+    function saveStudentOwnProfile(event) {
+      event.preventDefault();
+      const student = getStudentById(state.session.id);
+      if (!student) return;
+
+      const name = document.getElementById('prof-name').value.trim();
+      const phone = document.getElementById('prof-phone').value.trim();
+      const course = document.getElementById('prof-course').value;
+      const cgpa = parseFloat(document.getElementById('prof-cgpa').value);
+      const backlogs = parseInt(document.getElementById('prof-backlogs').value, 10);
+
+      if (!name) {
+        showToast('Full name is required.', 'error');
+        return;
+      }
+      if (isNaN(cgpa) || cgpa < 0 || cgpa > 10) {
+        showToast('CGPA must be between 0.00 and 10.00.', 'error');
+        return;
+      }
+      if (isNaN(backlogs) || backlogs < 0) {
+        showToast('Backlogs must be 0 or greater.', 'error');
+        return;
+      }
+
+      Object.assign(student, { name, phone, course, cgpa, backlogs });
+      state.session.name = name;
+      saveSession(state.session);
+      saveDB();
+      showToast('Profile saved! Eligibility across all open jobs has been updated.', 'success');
+      render();
+    }
+
+    /* =========================================================================
+       17. MAIN RENDER ROUTER & APPLICATION BOOTSTRAP
+       ========================================================================= */
+    function render() {
+      const root = document.getElementById('app');
+      if (!state.session) {
+        root.innerHTML = renderPortalEntryView();
+        return;
+      }
+
+      if (state.session.role === 'ADMIN') {
+        const nav = [
+          { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+          { id: 'students', label: 'Students', icon: '🎓' },
+          { id: 'companies', label: 'Companies', icon: '🏢' },
+          { id: 'jobs', label: 'Job Openings', icon: '💼' },
+          { id: 'applications', label: 'Applications & Interviews', icon: '📋' },
+          { id: 'reports', label: 'Reports (7)', icon: '📑' }
+        ];
+        let content = '';
+        switch (state.activeTab) {
+          case 'students': content = renderAdminStudents(); break;
+          case 'companies': content = renderAdminCompanies(); break;
+          case 'jobs': content = renderAdminJobs(); break;
+          case 'applications': content = renderAdminApplications(); break;
+          case 'reports': content = renderAdminReports(); break;
+          default: content = renderAdminDashboard();
+        }
+        root.innerHTML = renderPortalShell(nav, content);
+      } else {
+        const nav = [
+          { id: 'jobs', label: 'Job Openings', icon: '💼' },
+          { id: 'applications', label: 'My Applications', icon: '📋' },
+          { id: 'profile', label: 'My Profile', icon: '👤' }
+        ];
+        let content = '';
+        switch (state.activeTab) {
+          case 'applications': content = renderStudentApplications(); break;
+          case 'profile': content = renderStudentProfile(); break;
+          default: content = renderStudentJobs();
+        }
+        root.innerHTML = renderPortalShell(nav, content);
+      }
+    }
+
+    // Bootstrap Application
+    (function bootstrap() {
+      initDB();
+      loadSession();
+      render();
+    })();
+  </script>
+</body>
+</html>
